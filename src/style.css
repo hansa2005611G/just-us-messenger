@@ -156,15 +156,34 @@ button { cursor: pointer; }
 .removed-label, .waiting-label { color: #8d9888; font-size: 8px; line-height: 1.45; text-align: right; white-space: nowrap; }
 .download-once { min-width: 88px; padding: 8px 9px; border: 0; border-radius: 9px; background: #758d79; color: white; font-size: 9px; font-weight: 600; }
 .download-once:disabled { cursor: wait; opacity: .6; }
+.profile-button { display: grid; place-items: center; width: 39px; height: 39px; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.profile-button:hover { background: #f0f2eb; }
+.profile-avatar, .profile-modal-avatar { display: grid; place-items: center; border-radius: 50%; background: #e3eade; color: #5f7763; font-weight: 700; }
+.profile-avatar { width: 33px; height: 33px; font-size: 11px; }
+.profile-modal-backdrop { position: fixed; z-index: 5; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(42,45,39,.28); backdrop-filter: blur(4px); }
+.profile-modal { position: relative; width: min(100%, 370px); padding: 34px 30px 27px; border: 1px solid #e8e6de; border-radius: 22px; background: #fbfaf7; box-shadow: 0 20px 70px rgba(45,48,41,.18); text-align: center; }
+.profile-close { position: absolute; top: 12px; right: 14px; display: grid; place-items: center; width: 31px; height: 31px; border: 0; border-radius: 50%; background: #f0f0e9; color: #777a72; font-size: 22px; line-height: 1; }
+.profile-modal-avatar { width: 58px; height: 58px; margin: 0 auto 17px; font: 23px var(--serif); }
+.profile-modal h2 { margin: 7px 0 4px; color: #3b413a; font: 400 25px var(--serif); }
+.profile-email { margin: 0 0 24px; color: #96978d; font-size: 11px; }
+.profile-modal .auth-field { margin-bottom: 19px; }
+.profile-modal-actions { display: flex; align-items: center; gap: 10px; }
+.profile-modal-actions .primary-button { width: auto; flex: 1; }
+.profile-cancel { height: 45px; padding: 0 17px; border: 1px solid #e5e4dc; border-radius: 10px; background: transparent; color: #777a72; font-size: 11px; }
+.pin-gate-form { margin-top: 31px; }
+.pin-gate-form input { text-align: center; font-size: 19px; letter-spacing: .42em; }
+.pin-signout { margin-top: 18px; padding: 4px; border: 0; background: none; color: #85877e; font-size: 10px; text-decoration: underline; text-underline-offset: 3px; }
 
 @media (max-width: 760px) {
-  .chat-shell { padding: 0; gap: 0; height: 100dvh; min-height: 100dvh; }
+  .chat-shell { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); gap: 0; height: 100dvh; min-height: 100dvh; }
   .sidebar { display: none; }
   .chat-panel { border: 0; border-radius: 0; }
   .chat-header { flex-basis: 73px; padding: 0 17px; }
   .chat-title h2 { font-size: 17px; }
   .secure-label { display: none; }
   .mobile-lock { display: grid; place-items: center; width: 35px; height: 35px; border: 1px solid #eeece4; border-radius: 50%; background: #fbfaf7; color: #87917f; }
+  .profile-button { width: 35px; height: 35px; }
+  .profile-avatar { width: 30px; height: 30px; }
   .messages-area { padding: 22px 16px; }
   .empty-state { top: 48%; }
   .compose-wrap { padding: 11px 12px calc(10px + env(safe-area-inset-bottom)); }
@@ -182,4 +201,5 @@ button { cursor: pointer; }
   .pin-box { width: 50px; height: 55px; }
   .message-row { max-width: 94%; }
   .compose-caption span:last-child { text-align: right; }
+  .profile-modal { padding: 31px 23px 24px; }
 }
