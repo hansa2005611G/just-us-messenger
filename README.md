@@ -5,7 +5,7 @@ A small, private web messenger for two people. GitHub Pages serves the frontend;
 ## Included
 
 - Email/password accounts for two approved email addresses.
-- One shared 4-digit app lock after email sign-in, with hashed storage and a pause after repeated wrong codes.
+- A separate 4-digit app lock for each account after the first email sign-in, with hashed storage and a pause after repeated wrong codes.
 - Editable display names, live online status, and last-seen time.
 - Installable iPhone Home Screen web app.
 - Live one-to-one text messages.
@@ -21,16 +21,16 @@ If the recipient never downloads a file, it stays in private Storage until they 
 ## Set up Supabase Free
 
 1. Create a Supabase project.
-2. Run `supabase/setup.sql` in the Supabase SQL Editor before either person creates an account. Then run `supabase/profiles_presence_pin.sql`. The second script adds profiles, online/last-seen status, and the shared 4-digit lock.
+2. Run `supabase/setup.sql` in the Supabase SQL Editor before either person creates an account. Then run `supabase/profiles_presence_pin.sql`. The second script adds profiles, online/last-seen status, and an individual 4-digit lock for each account.
 3. Add the two lowercase email addresses that should be allowed to use the chat to `private.chat_allowed_emails`. Keep these addresses in Supabase and out of the public repository. For this project, the two addresses have already been added to the connected Supabase project.
 4. Under **Authentication → URL Configuration**, set the GitHub Pages address as the site URL and add it as a redirect URL. Keep email/password sign-in enabled. Set up custom SMTP under **Authentication → SMTP Settings** so Supabase can send account confirmation emails to both people. Supabase's default mailer only sends to members of your Supabase organization and is limited to two messages per hour. Keep email confirmation enabled so each person proves they own their address before signing in.
 5. In **Realtime → Settings**, turn **Allow public access** off so the private online-status channel uses its member-only rules.
 6. Copy `.env.example` to `.env.local`. Add your Supabase project URL and publishable key from **Project Settings → API**.
 7. For local preview, run `npm install`, then `npm run dev`. The SQL allowlist must already contain the intended email addresses.
 
-The SQL allowlist accepts only the addresses you enter. Each person creates an account with their own email and password, then confirms their email before signing in. The first person sets the shared 4-digit code; the other person enters the same code. The app asks for it when opened and relocks after 30 minutes. The code is stored as a password hash. Five wrong attempts pause code entry for that account for 15 minutes.
+The SQL allowlist accepts only the addresses you enter. Each person creates an account with their own email and password, then confirms their email before signing in. The email session stays saved on that device, so they normally enter email and password only once; after that, opening the app asks for their own 4-digit code. Each account chooses a different code. If upgrading from the former shared-code version, both people can keep using the existing code until they open **Your profile → Your app code → Change my code**. The app relocks after 30 minutes. Codes are stored as password hashes. Five wrong attempts pause code entry for that account for 15 minutes.
 
-To use it on iPhone, open the published site in Safari, tap **Share → Add to Home Screen**, turn on **Open as Web App**, then tap **Add**. It will appear as an icon on that iPhone and open in its own app-style window. Online status is shown while the app is open; last seen updates about once a minute while the page is visible.
+To install it on iPhone, open the published site in Safari, tap **Share → Add to Home Screen**, turn on **Open as Web App**, then tap **Add**. Open Just Us from the new Home Screen icon and sign in once there. It will appear as an icon and open in its own app-style window; the email session stays saved on that iPhone. Online status is shown while the app is open; last seen updates about once a minute while the page is visible.
 
 ## Publish on GitHub Pages
 

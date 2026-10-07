@@ -1,9 +1,14 @@
 -- Run after setup.sql. Adds editable profiles, last-seen/online status,
--- and a shared four-digit app lock on top of email/password authentication.
+-- and a personal four-digit app lock for each email account.
 create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists private.chat_pin_settings (
   singleton boolean primary key default true check (singleton),
+  pin_hash text not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists private.chat_user_pins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
   pin_hash text not null,
   created_at timestamptz not null default now()
 );
@@ -38,9 +43,19 @@ create table if not exists private.chat_pin_unlocks (
   primary key (user_id, session_id)
 );
 alter table private.chat_pin_settings enable row level security;
+alter table private.chat_user_pins enable row level security;
 alter table private.chat_pin_attempts enable row level security;
 alter table private.chat_pin_unlocks enable row level security;
-revoke all on table private.chat_pin_settings, private.chat_pin_attempts, private.chat_pin_unlocks
+-- Preserve an existing shared code for both current accounts so the rollout
+-- does not lock either person out. Each person can then change their own code.
+insert into private.chat_user_pins (user_id, pin_hash)
+select member.user_id, settings.pin_hash
+from public.chat_members as member
+cross join private.chat_pin_settings as settings
+where settings.singleton
+on conflict (user_id) do nothing;
+
+revoke all on table private.chat_pin_settings, private.chat_user_pins, private.chat_pin_attempts, private.chat_pin_unlocks
   from public, anon, authenticated;
 
 create table if not exists public.chat_profiles (
@@ -106,7 +121,7 @@ begin
   ) then
     return 'denied';
   end if;
-  if not exists (select 1 from private.chat_pin_settings where singleton) then
+  if not exists (select 1 from private.chat_user_pins where user_id = (select auth.uid())) then
     return 'setup';
   end if;
   if (select private.is_chat_pin_unlocked()) then
@@ -147,9 +162,9 @@ begin
     return false;
   end if;
 
-  insert into private.chat_pin_settings (singleton, pin_hash)
-  values (true, extensions.crypt(p_pin, extensions.gen_salt('bf', 12)))
-  on conflict (singleton) do nothing
+  insert into private.chat_user_pins (user_id, pin_hash)
+  values ((select auth.uid()), extensions.crypt(p_pin, extensions.gen_salt('bf', 12)))
+  on conflict (user_id) do nothing
   returning true into v_created;
 
   if coalesce(v_created, false) then
@@ -181,7 +196,7 @@ begin
     return 'denied';
   end if;
 
-  select pin_hash into v_hash from private.chat_pin_settings where singleton;
+  select pin_hash into v_hash from private.chat_user_pins where user_id = v_user_id;
   if v_hash is null then return 'setup_required'; end if;
 
   insert into private.chat_pin_attempts (user_id, failed_attempts)
@@ -215,14 +230,44 @@ begin
 end;
 $$;
 
+create or replace function public.change_chat_pin(p_new_pin text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_session_id uuid := nullif(auth.jwt() ->> 'session_id', '')::uuid;
+begin
+  if v_user_id is null or v_session_id is null or p_new_pin !~ '^[0-9]{4}$'
+    or not exists (select 1 from public.chat_members where user_id = v_user_id)
+    or not (select private.is_chat_pin_unlocked()) then
+    return false;
+  end if;
+
+  update private.chat_user_pins
+  set pin_hash = extensions.crypt(p_new_pin, extensions.gen_salt('bf', 12))
+  where user_id = v_user_id;
+  if not found then return false; end if;
+
+  insert into private.chat_pin_unlocks (user_id, session_id, unlocked_until)
+  values (v_user_id, v_session_id, now() + interval '30 minutes')
+  on conflict (user_id, session_id) do update set unlocked_until = excluded.unlocked_until;
+  return true;
+end;
+$$;
+
 revoke all on function public.chat_pin_status() from public, anon;
 revoke all on function public.lock_chat_pin() from public, anon;
 revoke all on function public.setup_chat_pin(text) from public, anon;
 revoke all on function public.verify_chat_pin(text) from public, anon;
+revoke all on function public.change_chat_pin(text) from public, anon;
 grant execute on function public.chat_pin_status() to authenticated;
 grant execute on function public.lock_chat_pin() to authenticated;
 grant execute on function public.setup_chat_pin(text) to authenticated;
 grant execute on function public.verify_chat_pin(text) to authenticated;
+grant execute on function public.change_chat_pin(text) to authenticated;
 
 drop policy if exists "Only members can read chat messages" on public.chat_messages;
 create policy "Only members can read chat messages"

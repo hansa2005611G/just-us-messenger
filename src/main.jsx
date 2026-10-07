@@ -123,6 +123,7 @@ function AuthGate({ onDone }) {
           </button>
         </p>
         <div className="gate-footnote"><span className="pulse-dot" /> Only approved email addresses can join</div>
+        <div className="install-tip"><strong>Put Just Us on your iPhone</strong><span>Open this page in Safari, tap Share, choose Add to Home Screen, turn on Open as Web App, then tap Add.</span></div>
         <div className="gate-bottom"><span className="tiny-heart">♡</span> a private place for two</div>
       </div>
     </main>
@@ -187,7 +188,7 @@ function PinGate({ onUnlock, onSignOut }) {
       const { data, error: statusError } = await supabase.rpc('chat_pin_status');
       if (!active) return;
       if (statusError) {
-        setError('Could not check the shared code. Please try again.');
+        setError('Could not check your code. Please try again.');
         setMode('locked');
       } else if (data === 'setup') {
         setMode('setup');
@@ -230,48 +231,48 @@ function PinGate({ onUnlock, onSignOut }) {
       setMode('locked');
       setPin('');
       setConfirmPin('');
-      setError('The shared code was already set. Enter it below.');
+      setError('Your code is already set. Enter it below.');
     } else if (data === 'verified') {
       onUnlock();
     } else if (data === 'locked') {
       setError('Too many tries. Please wait 15 minutes, then try again.');
     } else if (data === 'setup_required') {
       setMode('setup');
-      setError('Set the shared code to get started.');
+      setError('Choose your own code to get started.');
     } else {
       setError('That code did not match. Please try again.');
     }
   };
 
   if (mode === 'loading') {
-    return <main className="loading-screen"><BrandMark mini /><span>Checking your shared code…</span></main>;
+    return <main className="loading-screen"><BrandMark mini /><span>Checking your code…</span></main>;
   }
 
   return (
     <main className="gate-screen">
       <div className="gate-card">
         <BrandMark />
-        <div className="eyebrow">A SHARED LOCK FOR TWO</div>
-        <h1>{mode === 'setup' ? <>Choose your<br />shared code.</> : <>Welcome back<br />to your space.</>}</h1>
+        <div className="eyebrow">YOUR PERSONAL APP LOCK</div>
+        <h1>{mode === 'setup' ? <>Choose your<br />own code.</> : <>Welcome back<br />to your space.</>}</h1>
         <p className="gate-subtitle">{mode === 'setup'
-          ? 'Set one 4-digit code for both of you. The other person will enter the same code.'
-          : 'Enter the 4-digit code you both share.'}</p>
+          ? 'Choose a private 4-digit code for this account. Your chat partner will choose their own.'
+          : 'Enter your personal 4-digit code.'}</p>
         {mode !== 'denied' && (
           <form onSubmit={submit} className="auth-form pin-gate-form">
             <label className="field-label auth-field">
-              {mode === 'setup' ? 'CHOOSE FOUR DIGITS' : 'YOUR SHARED CODE'}
-              <input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} maxLength={4} placeholder="••••" aria-label="4-digit shared code" autoFocus required />
+              {mode === 'setup' ? 'CHOOSE FOUR DIGITS' : 'YOUR CODE'}
+              <input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} maxLength={4} placeholder="••••" aria-label="Your 4-digit code" autoFocus required />
             </label>
             {mode === 'setup' && (
               <label className="field-label auth-field">
                 CONFIRM THE CODE
-                <input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))} maxLength={4} placeholder="••••" aria-label="Confirm 4-digit shared code" required />
+                <input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))} maxLength={4} placeholder="••••" aria-label="Confirm your 4-digit code" required />
               </label>
             )}
             {error && <p className="error-message" role="alert">{error}</p>}
             <button className="primary-button" disabled={busy || pin.length !== 4 || (mode === 'setup' && confirmPin.length !== 4)}>
               {busy ? <span className="spinner" /> : <Icon name="lock" size={17} />}
-              {busy ? 'Please wait…' : mode === 'setup' ? 'Set shared code' : 'Unlock chat'}
+              {busy ? 'Please wait…' : mode === 'setup' ? 'Set my code' : 'Unlock chat'}
             </button>
           </form>
         )}
@@ -332,6 +333,11 @@ function Chat({ user, onLock }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDraft, setProfileDraft] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
+  const [pinDraft, setPinDraft] = useState('');
+  const [pinConfirm, setPinConfirm] = useState('');
+  const [pinSaving, setPinSaving] = useState(false);
+  const [pinNotice, setPinNotice] = useState('');
+  const [pinError, setPinError] = useState('');
   const [clock, setClock] = useState(Date.now());
   const messageEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -473,6 +479,30 @@ function Chat({ user, onLock }) {
     setProfileSaving(false);
   };
 
+  const changePin = async (event) => {
+    event.preventDefault();
+    setPinNotice('');
+    setPinError('');
+    if (!/^\d{4}$/.test(pinDraft)) {
+      setPinError('Enter all 4 digits.');
+      return;
+    }
+    if (pinDraft !== pinConfirm) {
+      setPinError('Those codes do not match.');
+      return;
+    }
+    setPinSaving(true);
+    const { data, error: changeError } = await supabase.rpc('change_chat_pin', { p_new_pin: pinDraft });
+    setPinSaving(false);
+    if (changeError || data !== true) {
+      setPinError('Could not change your code. Please unlock the app and try again.');
+      return;
+    }
+    setPinDraft('');
+    setPinConfirm('');
+    setPinNotice('Your personal code has been changed.');
+  };
+
   const sendText = async (event) => {
     event.preventDefault();
     const clean = text.trim();
@@ -592,7 +622,7 @@ function Chat({ user, onLock }) {
         </div>
         <div className="sidebar-bottom">
           <div className="privacy-card"><span className="privacy-icon"><Icon name="lock" size={16} /></span><div><strong>A space for two</strong><small>Email protected</small></div></div>
-          <button className="lock-button" onClick={onLock}><Icon name="lock" size={16} /> Sign out</button>
+          <button className="lock-button" onClick={onLock}><Icon name="lock" size={16} /> Lock app</button>
         </div>
       </aside>
 
@@ -607,7 +637,7 @@ function Chat({ user, onLock }) {
             <button className="profile-button" aria-label="Edit your profile" title="Edit your profile" onClick={() => { setProfileDraft(mineName); setProfileOpen(true); }}>
               <span className="profile-avatar">{initials(mineName)}</span>
             </button>
-            <button className="icon-button mobile-lock" aria-label="Sign out" onClick={onLock}><Icon name="lock" size={18} /></button>
+            <button className="icon-button mobile-lock" aria-label="Lock app" title="Lock app" onClick={onLock}><Icon name="lock" size={18} /></button>
           </div>
         </header>
 
@@ -662,6 +692,25 @@ function Chat({ user, onLock }) {
               <button type="submit" className="primary-button" disabled={profileSaving || !profileDraft.trim()}>{profileSaving ? 'Saving…' : 'Save profile'}</button>
             </div>
           </form>
+          <div className="profile-security">
+            <h3>Your app code</h3>
+            <p>Choose a different 4-digit code for this account.</p>
+            <form onSubmit={changePin}>
+              <label className="field-label auth-field">
+                NEW FOUR-DIGIT CODE
+                <input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="new-password" value={pinDraft} onChange={(e) => setPinDraft(e.target.value.replace(/\D/g, '').slice(0, 4))} maxLength={4} placeholder="••••" aria-label="New 4-digit code" required />
+              </label>
+              <label className="field-label auth-field">
+                CONFIRM NEW CODE
+                <input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={pinConfirm} onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))} maxLength={4} placeholder="••••" aria-label="Confirm new 4-digit code" required />
+              </label>
+              {pinError && <p className="error-message" role="alert">{pinError}</p>}
+              {pinNotice && <p className="info-message" role="status">{pinNotice}</p>}
+              <button type="submit" className="primary-button" disabled={pinSaving || pinDraft.length !== 4 || pinConfirm.length !== 4}>
+                {pinSaving ? 'Saving…' : 'Change my code'}
+              </button>
+            </form>
+          </div>
         </section>
       </div>
     )}
@@ -678,6 +727,12 @@ function App() {
   const unlockPin = useCallback(() => {
     setPinExpiresAt(Date.now() + 30 * 60 * 1000);
     setPinUnlocked(true);
+  }, []);
+
+  const lockApp = useCallback(async () => {
+    await supabase.rpc('lock_chat_pin');
+    setPinUnlocked(false);
+    setPinExpiresAt(0);
   }, []);
 
   useEffect(() => {
@@ -735,7 +790,7 @@ function App() {
   if (!user) return <AuthGate onDone={setUser} />;
   if (membership !== 'member') return <AccessDenied email={user.email} onSignOut={signOut} />;
   if (!pinUnlocked) return <PinGate onUnlock={unlockPin} onSignOut={signOut} />;
-  return <Chat user={user} onLock={signOut} />;
+  return <Chat user={user} onLock={lockApp} />;
 }
 
 createRoot(document.getElementById('root')).render(<App />);
