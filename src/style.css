@@ -195,6 +195,8 @@ button { cursor: pointer; }
   .empty-state { top: 48%; }
   .compose-wrap { padding: 11px 12px calc(10px + env(safe-area-inset-bottom)); }
   .compose-caption { font-size: 7px; }
+  /* iPhone Safari zooms the whole page when a focused input uses under 16px. */
+  .auth-field input, .message-form input { font-size: 16px; }
   .compose-hint { display: none; }
   .message-row { max-width: 88%; }
   .ephemeral-file { min-width: 220px; gap: 7px; }
