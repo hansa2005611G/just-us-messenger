@@ -1,9 +1,25 @@
--- Replace the two example addresses at the bottom with your email addresses.
--- Run this entire file in the Supabase SQL Editor before either person signs up.
-create table if not exists public.chat_allowed_emails (
+-- Run this file in the Supabase SQL Editor before either person signs up.
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+grant usage on schema private to authenticated;
+
+create table if not exists private.chat_allowed_emails (
   email text primary key check (email = lower(email)),
   created_at timestamptz not null default now()
 );
+alter table private.chat_allowed_emails enable row level security;
+revoke all on table private.chat_allowed_emails from public, anon, authenticated;
+
+-- Preserve the allowlist when upgrading from the earlier public-table setup.
+do $$
+begin
+  if to_regclass('public.chat_allowed_emails') is not null then
+    execute 'insert into private.chat_allowed_emails (email, created_at)
+      select email, created_at from public.chat_allowed_emails
+      on conflict (email) do nothing';
+  end if;
+end;
+$$;
 
 create table if not exists public.chat_members (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -59,17 +75,39 @@ create table if not exists public.chat_messages (
   )
 );
 
-alter table public.chat_allowed_emails enable row level security;
+-- Private object storage for images and documents (20 MiB maximum per file).
+insert into storage.buckets (
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+)
+values (
+  'chat-files',
+  'chat-files',
+  false,
+  20971520,
+  array[
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf', 'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain', 'text/csv'
+  ]
+)
+on conflict (id) do nothing;
+
 alter table public.chat_members enable row level security;
 alter table public.chat_messages enable row level security;
 
-revoke all on public.chat_allowed_emails from anon, authenticated;
 revoke all on public.chat_members from anon, authenticated;
 revoke all on public.chat_messages from anon, authenticated;
 grant select on public.chat_members to authenticated;
 grant select, insert on public.chat_messages to authenticated;
 
-create or replace function public.is_chat_member()
+create or replace function private.is_chat_member()
 returns boolean
 language sql
 stable
@@ -83,8 +121,8 @@ as $$
   );
 $$;
 
-revoke all on function public.is_chat_member() from public;
-grant execute on function public.is_chat_member() to authenticated;
+revoke all on function private.is_chat_member() from public, anon, authenticated;
+grant execute on function private.is_chat_member() to authenticated;
 
 drop policy if exists "Members can view their own membership" on public.chat_members;
 create policy "Members can view their own membership"
@@ -94,19 +132,19 @@ create policy "Members can view their own membership"
 drop policy if exists "Only members can read chat messages" on public.chat_messages;
 create policy "Only members can read chat messages"
   on public.chat_messages for select to authenticated
-  using ((select public.is_chat_member()));
+  using ((select private.is_chat_member()));
 
 drop policy if exists "Members can send their own messages" on public.chat_messages;
 create policy "Members can send their own messages"
   on public.chat_messages for insert to authenticated
   with check (
-    (select public.is_chat_member())
+    (select private.is_chat_member())
     and sender_id = (select auth.uid())
     and downloaded_at is null
     and downloaded_by is null
   );
 
-create or replace function public.enroll_allowed_chat_user()
+create or replace function private.enroll_allowed_chat_user()
 returns trigger
 language plpgsql
 security definer
@@ -115,7 +153,7 @@ as $$
 begin
   if new.email is null or not exists (
     select 1
-    from public.chat_allowed_emails
+    from private.chat_allowed_emails
     where email = lower(new.email)
   ) then
     raise exception using
@@ -129,12 +167,14 @@ begin
 end;
 $$;
 
-revoke all on function public.enroll_allowed_chat_user() from public;
+revoke all on function private.enroll_allowed_chat_user() from public, anon, authenticated;
 
 drop trigger if exists enroll_allowed_chat_user on auth.users;
 create trigger enroll_allowed_chat_user
   after insert on auth.users
-  for each row execute procedure public.enroll_allowed_chat_user();
+  for each row execute function private.enroll_allowed_chat_user();
+
+drop function if exists public.enroll_allowed_chat_user();
 
 create or replace function public.mark_chat_file_downloaded(p_message_id uuid)
 returns boolean
@@ -143,6 +183,10 @@ security definer
 set search_path = ''
 as $$
 begin
+  if (select auth.uid()) is null then
+    return false;
+  end if;
+
   update public.chat_messages as message
   set file_path = null,
       downloaded_at = now(),
@@ -151,7 +195,7 @@ begin
     and message.sender_id <> (select auth.uid())
     and message.file_path is not null
     and message.downloaded_at is null
-    and (select public.is_chat_member())
+    and (select private.is_chat_member())
     and not exists (
       select 1
       from storage.objects as stored_file
@@ -162,15 +206,20 @@ begin
 end;
 $$;
 
-revoke all on function public.mark_chat_file_downloaded(uuid) from public;
+revoke all on function public.mark_chat_file_downloaded(uuid) from public, anon;
 grant execute on function public.mark_chat_file_downloaded(uuid) to authenticated;
+
+create index if not exists chat_messages_sender_id_idx
+  on public.chat_messages(sender_id);
+create index if not exists chat_messages_downloaded_by_idx
+  on public.chat_messages(downloaded_by);
 
 drop policy if exists "Chat members can read chat files" on storage.objects;
 create policy "Chat members can read chat files"
   on storage.objects for select to authenticated
   using (
     bucket_id = 'chat-files'
-    and (select public.is_chat_member())
+    and (select private.is_chat_member())
   );
 
 drop policy if exists "Chat members can upload their own files" on storage.objects;
@@ -178,7 +227,7 @@ create policy "Chat members can upload their own files"
   on storage.objects for insert to authenticated
   with check (
     bucket_id = 'chat-files'
-    and (select public.is_chat_member())
+    and (select private.is_chat_member())
     and (storage.foldername(name))[1] = (select auth.uid()::text)
   );
 
@@ -187,7 +236,7 @@ create policy "Recipients can delete received files"
   on storage.objects for delete to authenticated
   using (
     bucket_id = 'chat-files'
-    and (select public.is_chat_member())
+    and (select private.is_chat_member())
     and (storage.foldername(name))[1] <> (select auth.uid()::text)
   );
 
@@ -196,7 +245,7 @@ create policy "Senders can delete unlinked uploads"
   on storage.objects for delete to authenticated
   using (
     bucket_id = 'chat-files'
-    and (select public.is_chat_member())
+    and (select private.is_chat_member())
     and (storage.foldername(name))[1] = (select auth.uid()::text)
     and not exists (
       select 1
@@ -205,10 +254,20 @@ create policy "Senders can delete unlinked uploads"
     )
   );
 
--- Realtime subscriptions are scoped to chat_messages and still obey its RLS policy.
-alter publication supabase_realtime add table public.chat_messages;
+drop function if exists public.is_chat_member();
+drop table if exists public.chat_allowed_emails;
 
--- Only the two addresses listed here will become chat members after signup.
-insert into public.chat_allowed_emails (email)
-values ('first@example.com'), ('second@example.com')
-on conflict (email) do nothing;
+-- Realtime subscriptions are scoped to chat_messages and still obey its RLS policy.
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'chat_messages'
+  ) then
+    alter publication supabase_realtime add table public.chat_messages;
+  end if;
+end;
+$$;

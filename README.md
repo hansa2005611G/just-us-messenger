@@ -18,12 +18,11 @@ If the recipient never downloads a file, it stays in private Storage until they 
 ## Set up Supabase Free
 
 1. Create a Supabase project.
-2. In **Storage**, create a private bucket named chat-files. Set its file-size limit to 20 MB. Allow these MIME types: image/jpeg, image/png, image/gif, image/webp, application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/plain, and text/csv.
-3. Open supabase/setup.sql. Replace first@example.com and second@example.com at the bottom with the two email addresses that should be allowed to use the chat. Use lowercase addresses.
-4. Run the updated SQL once in the Supabase SQL Editor before either person creates an account. It creates the chat tables, security policies, approved-email enrollment, one-time download handling, and the live-message subscription.
-5. Under **Authentication → URL Configuration**, set the GitHub Pages address as the site URL and add it as a redirect URL. Keep email/password sign-in enabled. Set up custom SMTP under **Authentication → SMTP Settings** so Supabase can send account confirmation emails to both people. Supabase's default mailer only sends to members of your Supabase organization and is limited to two messages per hour. Keep email confirmation enabled so each person proves they own their address before signing in.
-6. Copy .env.example to .env.local. Add your Supabase project URL and publishable key from **Project Settings → API**.
-7. For local preview, run npm install, then npm run dev. The SQL allowlist must already contain your two email addresses.
+2. Run `supabase/setup.sql` in the Supabase SQL Editor before either person creates an account. It creates the private 20 MB file bucket, chat tables, security policies, approved-email enrollment, one-time download handling, and the live-message subscription.
+3. Add the two lowercase email addresses that should be allowed to use the chat to `private.chat_allowed_emails`. Keep these addresses in Supabase and out of the public repository. For this project, the two addresses have already been added to the connected Supabase project.
+4. Under **Authentication → URL Configuration**, set the GitHub Pages address as the site URL and add it as a redirect URL. Keep email/password sign-in enabled. Set up custom SMTP under **Authentication → SMTP Settings** so Supabase can send account confirmation emails to both people. Supabase's default mailer only sends to members of your Supabase organization and is limited to two messages per hour. Keep email confirmation enabled so each person proves they own their address before signing in.
+5. Copy `.env.example` to `.env.local`. Add your Supabase project URL and publishable key from **Project Settings → API**.
+6. For local preview, run `npm install`, then `npm run dev`. The SQL allowlist must already contain your two email addresses.
 
 The SQL allowlist accepts only the two addresses you enter. Each person creates an account with their own email and password, then confirms their email before signing in. Other addresses cannot join the chat.
 
